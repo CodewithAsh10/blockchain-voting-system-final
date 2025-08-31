@@ -1,4 +1,5 @@
 # Decentralized Blockchain Voting System
+<img src="https://img.shields.io/badge/React-18.2.0-blue"> <img src="https://img.shields.io/badge/Python-3.8%252B-green"> <img src="https://img.shields.io/badge/Blockchain-Custom-orange"><p></p>
 A secure, transparent voting platform built on blockchain technology.
 
 ## File Structure
