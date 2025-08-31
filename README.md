@@ -1,7 +1,8 @@
 # Decentralized Blockchain Voting System
-
 A secure, transparent voting platform built on blockchain technology.
 
+## File Structure
+<img src="https://github.com/CodewithAsh10/blockchain-voting-system-final/blob/main/frontend-new/public/WhatsApp%20Image%202025-08-31%20at%2016.12.46_e1687213.jpg">
 ## Features
 - Voter registration with admin authentication
 - Secure vote casting with cryptographic hashing
@@ -61,6 +62,10 @@ A secure, transparent voting platform built on blockchain technology.
 
 ## Supervisor
 Dr. Nilesh Kunhare
+
+## Reviewer
+Dr.Gaurav Soni
+Dr.Ravi Verma
 
 ## License
 This project is for educational purposes.
