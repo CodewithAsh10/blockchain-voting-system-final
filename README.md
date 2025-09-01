@@ -59,7 +59,7 @@ A secure, transparent voting platform built on blockchain technology.
 - Neel Pandey : 24BCE10303
 - Yash Tripathi : 24BCE10603
 - Ayush Man Singh Bhadauria : 24BCE10404
-- Mohit Bankar : 24BCE1104
+- Mohit Bankar : 24BCE11104
 - Arsh Bakshi : 24BCE10568
 
 ## Supervisor
