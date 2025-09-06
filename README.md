@@ -26,16 +26,54 @@ A secure, transparent voting platform built on blockchain technology.
 - Python 3.8+
 - Node.js 14+
 - npm or yarn
+- MySQL Server (local or cloud)
 
-### Backend Setup
+### MySQL Database Setup (New)
+
+This project now uses MySQL for persistent storage of all elections, voters, votes, and blockchain data.
+
+#### MySQL Setup Steps
+1. Log in to MySQL as root:
+   ```
+   mysql -u root -p
+   ```
+2. Create a database and user for the project:
+   ```sql
+   CREATE DATABASE voting_system;
+   CREATE USER 'project'@'localhost' IDENTIFIED BY 'mohit';
+   GRANT ALL PRIVILEGES ON voting_system.* TO 'project'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+3. The backend will automatically create all required tables on first run.
+
+
+### Quick Start (One-Click)
+
+After completing the MySQL setup steps above, you can start the entire project (backend servers and frontend) with a single click:
+
+1. Double-click the `start_all.bat` file in the project root.
+2. This will automatically:
+   - Set up the Python virtual environment (if needed)
+   - Install backend dependencies
+   - Start the backend Flask server and WebSocket server
+   - Install frontend dependencies and start the React app
+
+You will see new command windows open for each server. The app will be available at [http://localhost:3000](http://localhost:3000).
+
+
+### Backend Setup (Updated)
 1. Navigate to the backend directory: `cd backend`
 2. Create a virtual environment: `python -m venv venv`
 3. Activate the virtual environment:
    - Windows: `venv\Scripts\activate`
    - macOS/Linux: `source venv/bin/activate`
 4. Install dependencies: `pip install -r requirements.txt`
-5. Run the Flask server: `python app.py`
-6. In a new terminal, run the WebSocket server: `python ws_server.py`
+5. Run the DB initialization script (creates tables):
+   ```
+   python init_db.py
+   ```
+6. Run the Flask server: `python app.py`
+7. In a new terminal, run the WebSocket server: `python ws_server.py`
 
 ### Frontend Setup
 1. Navigate to the frontend directory: `cd frontend-new`
