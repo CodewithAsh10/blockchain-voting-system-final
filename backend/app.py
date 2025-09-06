@@ -4,14 +4,15 @@ import time
 import hashlib
 import json
 from datetime import datetime
+from db import get_db_connection
 
 app = Flask(__name__)
 CORS(app)
 
 # Global storage
-elections = {}
+elections = None
+registered_voters = None
 admin_key = "admin123"
-registered_voters = {}
 
 class Block:
     def __init__(self, index, transactions, timestamp, previous_hash, nonce=0):
@@ -163,20 +164,41 @@ def get_election_status(election):
     else:
         return "active"
 
+# Helper functions for DB access
+
+def get_elections_from_db():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM elections')
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+def get_voters_from_db():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM voters')
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
 # Routes
 @app.route('/elections', methods=['GET'])
 def get_elections():
     try:
         elections_list = []
-        for election_id, election in elections.items():
+        for row in get_elections_from_db():
+            candidates = json.loads(row['candidates']) if row['candidates'] else []
             elections_list.append({
-                'election_id': election.election_id,
-                'name': election.name,
-                'candidates': election.candidates,
-                'start_time': election.start_time,
-                'end_time': election.end_time,
-                'status': get_election_status(election),
-                'voter_count': len(election.approved_voters)
+                'election_id': row['election_id'],
+                'name': row['name'],
+                'candidates': candidates,
+                'start_time': row['start_time'],
+                'end_time': row['end_time'],
+                'status': row['status'],
+                'voter_count': 0  # Will update with real count later
             })
         return jsonify(elections_list), 200
     except Exception as e:
@@ -186,33 +208,29 @@ def get_elections():
 def create_election():
     try:
         data = request.get_json()
-        
         if 'admin_key' not in data or data['admin_key'] != admin_key:
             return jsonify({"message": "Invalid admin key"}), 401
-        
         required_fields = ['election_id', 'name', 'candidates', 'duration_hours']
         if not all(field in data for field in required_fields):
             return jsonify({"message": "Missing required fields"}), 400
-        
         election_id = data['election_id']
-        if election_id in elections:
+        # Check if election exists in DB
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM elections WHERE election_id=%s', (election_id,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
             return jsonify({"message": "Election ID already exists"}), 400
-        
         start_time = time.time()
         end_time = start_time + (data['duration_hours'] * 3600)
-        
-        election = Election(
-            election_id=election_id,
-            name=data['name'],
-            candidates=data['candidates'],
-            start_time=start_time,
-            end_time=end_time,
-            status="upcoming"
-        )
-        
-        elections[election_id] = election
+        candidates_json = json.dumps(data['candidates'])
+        cursor.execute('''INSERT INTO elections (election_id, name, candidates, start_time, end_time, status) VALUES (%s, %s, %s, %s, %s, %s)''',
+            (election_id, data['name'], candidates_json, start_time, end_time, "upcoming"))
+        conn.commit()
+        cursor.close()
+        conn.close()
         return jsonify({"message": "Election created successfully"}), 201
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
@@ -220,35 +238,44 @@ def create_election():
 def manage_election():
     try:
         data = request.get_json()
-        
         if 'admin_key' not in data or data['admin_key'] != admin_key:
             return jsonify({"message": "Invalid admin key"}), 401
-        
         if 'election_id' not in data or 'action' not in data:
             return jsonify({"message": "Missing election_id or action"}), 400
-        
         election_id = data['election_id']
-        if election_id not in elections:
-            return jsonify({"message": "Election not found"}), 404
-        
-        election = elections[election_id]
         action = data['action']
-        
+        # Fetch election from DB
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM elections WHERE election_id=%s', (election_id,))
+        election = cursor.fetchone()
+        if not election:
+            cursor.close()
+            conn.close()
+            return jsonify({"message": "Election not found"}), 404
+        # Update status and times
         if action == 'start':
-            election.status = "active"
-            election.start_time = time.time()
+            new_status = "active"
+            new_start_time = time.time()
+            cursor.execute('UPDATE elections SET status=%s, start_time=%s WHERE election_id=%s', (new_status, new_start_time, election_id))
         elif action == 'stop':
-            election.status = "completed"
-            election.end_time = time.time()
+            new_status = "completed"
+            new_end_time = time.time()
+            cursor.execute('UPDATE elections SET status=%s, end_time=%s WHERE election_id=%s', (new_status, new_end_time, election_id))
         elif action == 'suspend':
-            election.status = "suspended"
+            new_status = "suspended"
+            cursor.execute('UPDATE elections SET status=%s WHERE election_id=%s', (new_status, election_id))
         elif action == 'resume':
-            election.status = "active"
+            new_status = "active"
+            cursor.execute('UPDATE elections SET status=%s WHERE election_id=%s', (new_status, election_id))
         else:
+            cursor.close()
+            conn.close()
             return jsonify({"message": "Invalid action"}), 400
-        
+        conn.commit()
+        cursor.close()
+        conn.close()
         return jsonify({"message": f"Election {action}ed successfully"}), 200
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
@@ -256,40 +283,35 @@ def manage_election():
 def approve_voter():
     try:
         data = request.get_json()
-        
         if 'admin_key' not in data or data['admin_key'] != admin_key:
             return jsonify({"message": "Invalid admin key"}), 401
-        
         if 'voter_id' not in data or 'election_id' not in data:
             return jsonify({"message": "Missing voter_id or election_id"}), 400
-        
         voter_id = data['voter_id']
         election_id = data['election_id']
-        
-        # Hash the voter ID
         voter_hash = hashlib.sha256(voter_id.encode()).hexdigest()
-        
-        if election_id not in elections:
-            return jsonify({"message": "Election not found"}), 404
-        
-        # Check if voter is registered
-        if voter_hash not in registered_voters:
+        # Check if voter exists in DB
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM voters WHERE hashed_id=%s', (voter_hash,))
+        voter = cursor.fetchone()
+        if not voter:
+            cursor.close()
+            conn.close()
             return jsonify({"message": "Voter not found. Please register first."}), 404
-        
-        # Update voter status to Active (only if not already active)
-        if registered_voters[voter_hash]['status'] == 'Pending':
-            registered_voters[voter_hash]['status'] = 'Active'
-        
-        # Add voter to approved voters for the election
-        elections[election_id].approved_voters.add(voter_hash)
-        
+        # Update voter status to Active
+        if voter['status'] == 'Pending':
+            cursor.execute('UPDATE voters SET status=%s WHERE hashed_id=%s', ('Active', voter_hash))
+            conn.commit()
+        # Optionally, store approval in a new table if needed
+        cursor.close()
+        conn.close()
         return jsonify({
             "message": f"Voter approved for {election_id} successfully",
             "voter_hash": voter_hash,
-            "status": registered_voters[voter_hash]['status'],
+            "status": 'Active',
             "approved_for": election_id
         }), 200
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 @app.route('/vote', methods=['POST'])
@@ -297,73 +319,108 @@ def add_vote():
     try:
         data = request.get_json()
         required_fields = ['voter_id', 'candidate', 'election_id']
-        
         if not all(field in data for field in required_fields):
             return jsonify({"message": "Missing fields"}), 400
-        
         voter_id_hash = hashlib.sha256(data['voter_id'].encode()).hexdigest()
         election_id = data['election_id']
-        
-        if election_id not in elections:
+        # Check if election exists in DB
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM elections WHERE election_id=%s', (election_id,))
+        election = cursor.fetchone()
+        if not election:
+            cursor.close()
+            conn.close()
             return jsonify({"message": "Election not found"}), 404
-        
-        election = elections[election_id]
-        
         # Check election status
-        status = get_election_status(election)
-        if status != "active":
-            return jsonify({"message": f"Election is {status}. Cannot vote."}), 400
-        
-        # Check voter approval
-        if voter_id_hash not in election.approved_voters:
-            return jsonify({"message": "Voter not approved for this election"}), 400
-        
-        # Check candidate validity
-        if data['candidate'] not in election.candidates:
-            return jsonify({"message": "Invalid candidate"}), 400
-        
-        # Create and add vote
-        vote = Vote(voter_id_hash, data['candidate'], election_id, time.time())
-        success = election.blockchain.add_vote(vote)
-        
-        if success:
-            # Mine the block
-            election.blockchain.mine_pending_transactions()
-            return jsonify({"message": "Vote added successfully"}), 201
+        now = time.time()
+        if election['status'] == "suspended":
+            status = "suspended"
+        elif now < election['start_time']:
+            status = "upcoming"
+        elif now > election['end_time']:
+            status = "completed"
         else:
+            status = "active"
+        if status != "active":
+            cursor.close()
+            conn.close()
+            return jsonify({"message": f"Election is {status}. Cannot vote."}), 400
+        # Check voter approval
+        cursor.execute('SELECT * FROM voters WHERE hashed_id=%s AND status=%s', (voter_id_hash, 'Active'))
+        voter = cursor.fetchone()
+        if not voter:
+            cursor.close()
+            conn.close()
+            return jsonify({"message": "Voter not approved for this election"}), 400
+        # Check candidate validity
+        candidates = json.loads(election['candidates']) if election['candidates'] else []
+        if data['candidate'] not in candidates:
+            cursor.close()
+            conn.close()
+            return jsonify({"message": "Invalid candidate"}), 400
+        # Check if voter already voted in this election
+        cursor.execute('SELECT * FROM votes WHERE voter_id=%s AND election_id=%s', (voter_id_hash, election_id))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
             return jsonify({"message": "Voter has already voted in this election"}), 400
-            
+        # Create and add vote
+        vote_hash = hashlib.sha256(json.dumps({
+            "voter_id": voter_id_hash,
+            "candidate": data['candidate'],
+            "election_id": election_id,
+            "timestamp": time.time()
+        }, sort_keys=True).encode()).hexdigest()
+        cursor.execute('''INSERT INTO votes (voter_id, candidate, election_id, timestamp, hash) VALUES (%s, %s, %s, %s, %s)''',
+            (voter_id_hash, data['candidate'], election_id, time.time(), vote_hash))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"message": "Vote added successfully"}), 201
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
 @app.route('/results/<election_id>', methods=['GET'])
 def get_results(election_id):
     try:
-        if election_id not in elections:
-            return jsonify({"message": "Election not found"}), 404
-        
-        election = elections[election_id]
-        results = election.blockchain.get_votes_by_candidate()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT candidate, COUNT(*) as votes FROM votes WHERE election_id=%s GROUP BY candidate', (election_id,))
+        results = {row['candidate']: row['votes'] for row in cursor.fetchall()}
+        cursor.close()
+        conn.close()
         return jsonify(results), 200
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
 @app.route('/chain/<election_id>', methods=['GET'])
 def get_chain(election_id):
     try:
-        if election_id not in elections:
-            return jsonify({"message": "Election not found"}), 404
-        
-        election = elections[election_id]
-        chain_data = [block.to_dict() for block in election.blockchain.chain]
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM blocks WHERE election_id=%s ORDER BY block_index', (election_id,))
+        blocks = cursor.fetchall()
+        chain_data = []
+        for block in blocks:
+            # Get transactions for this block
+            cursor.execute('''SELECT v.* FROM block_transactions bt JOIN votes v ON bt.vote_id = v.id WHERE bt.block_id=%s''', (block['id'],))
+            transactions = [dict(row) for row in cursor.fetchall()]
+            chain_data.append({
+                "index": block['block_index'],
+                "transactions": transactions,
+                "timestamp": block['timestamp'],
+                "previous_hash": block['previous_hash'],
+                "hash": block['hash'],
+                "nonce": block['nonce']
+            })
+        cursor.close()
+        conn.close()
         return jsonify({
             "chain": chain_data,
             "length": len(chain_data),
-            "election_id": election_id,
-            "election_name": election.name
+            "election_id": election_id
         }), 200
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
@@ -371,18 +428,17 @@ def get_chain(election_id):
 def get_voters():
     try:
         voters_list = []
-        for voter_hash, voter_info in registered_voters.items():
+        for row in get_voters_from_db():
             voters_list.append({
-                'hashed_id': voter_hash,
-                'original_id': voter_info['original_id'],
-                'name': voter_info['name'],
-                'email': voter_info['email'],
-                'place': voter_info['place'],
-                'age': voter_info['age'],
-                'status': voter_info['status']
+                'hashed_id': row['hashed_id'],
+                'original_id': row['original_id'],
+                'name': row['name'],
+                'email': row['email'],
+                'place': row['place'],
+                'age': row['age'],
+                'status': row['status']
             })
         return jsonify(voters_list), 200
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
@@ -398,18 +454,19 @@ def register_voter_self():
         
         voter_id_hash = hashlib.sha256(data['id'].encode()).hexdigest()
         
-        if voter_id_hash in registered_voters:
+        # Check if voter exists in DB
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM voters WHERE hashed_id=%s', (voter_id_hash,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
             return jsonify({"message": "Voter ID already registered"}), 400
-        
-        registered_voters[voter_id_hash] = {
-            'original_id': data['id'],
-            'name': data['name'],
-            'email': data['email'],
-            'place': data['place'],
-            'age': data['age'],
-            'status': 'Pending'
-        }
-        
+        cursor.execute('''INSERT INTO voters (hashed_id, original_id, name, email, place, age, status) VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+            (voter_id_hash, data['id'], data['name'], data['email'], data['place'], int(data['age']), 'Pending'))
+        conn.commit()
+        cursor.close()
+        conn.close()
         return jsonify({
             "message": "Registration submitted successfully. Waiting for admin approval.",
             "hashed_id": voter_id_hash
