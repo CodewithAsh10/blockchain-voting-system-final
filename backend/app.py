@@ -184,6 +184,24 @@ def get_voters_from_db():
     conn.close()
     return rows
 
+def save_block_to_db(election_id, block):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO blocks (election_id, block_index, timestamp, previous_hash, hash, nonce) VALUES (%s, %s, %s, %s, %s, %s)''',
+        (election_id, block.index, block.timestamp, block.previous_hash, block.hash, block.nonce))
+    block_id = cursor.lastrowid
+    # Save transactions for this block
+    for tx in block.transactions:
+        # Find vote id by hash
+        cursor.execute('SELECT id FROM votes WHERE hash=%s', (tx.hash,))
+        vote_row = cursor.fetchone()
+        if vote_row:
+            vote_id = vote_row[0]
+            cursor.execute('INSERT INTO block_transactions (block_id, vote_id) VALUES (%s, %s)', (block_id, vote_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 # Routes
 @app.route('/elections', methods=['GET'])
 def get_elections():
@@ -375,6 +393,26 @@ def add_vote():
         cursor.execute('''INSERT INTO votes (voter_id, candidate, election_id, timestamp, hash) VALUES (%s, %s, %s, %s, %s)''',
             (voter_id_hash, data['candidate'], election_id, time.time(), vote_hash))
         conn.commit()
+        cursor.close()
+        conn.close()
+        # --- Mine block and save to DB ---
+        # Recreate blockchain for this election from DB
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM blocks WHERE election_id=%s ORDER BY block_index', (election_id,))
+        blocks = cursor.fetchall()
+        chain = []
+        for block in blocks:
+            cursor.execute('''SELECT v.* FROM block_transactions bt JOIN votes v ON bt.vote_id = v.id WHERE bt.block_id=%s''', (block['id'],))
+            transactions = [type('Vote', (), tx)() for tx in cursor.fetchall()]
+            chain.append(Block(block['block_index'], transactions, block['timestamp'], block['previous_hash'], block['nonce']))
+        # Add the new vote as a pending transaction and mine
+        new_vote = Vote(voter_id_hash, data['candidate'], election_id, time.time())
+        blockchain = Blockchain(election_id)
+        blockchain.chain = chain if chain else [blockchain.create_genesis_block()]
+        blockchain.pending_transactions = [new_vote]
+        if blockchain.mine_pending_transactions():
+            save_block_to_db(election_id, blockchain.chain[-1])
         cursor.close()
         conn.close()
         return jsonify({"message": "Vote added successfully"}), 201
