@@ -38,7 +38,7 @@ A secure, transparent voting platform built on blockchain technology.
 6. In a new terminal, run the WebSocket server: `python ws_server.py`
 
 ### Frontend Setup
-1. Navigate to the frontend directory: `cd frontend`
+1. Navigate to the frontend directory: `cd frontend-new`
 2. Install dependencies: `npm install`
 3. Start the development server: `npm start`
 
