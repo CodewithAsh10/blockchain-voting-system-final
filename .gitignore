@@ -13,3 +13,6 @@ build/
 .DS_Store
 Thumbs.db
 
+backend/blockchain/__pycache__/block.cpython-312.pyc
+backend/blockchain/__pycache__/blockchain.cpython-312.pyc
+backend/blockchain/__pycache__/vote.cpython-312.pyc
