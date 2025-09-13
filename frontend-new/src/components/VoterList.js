@@ -13,15 +13,18 @@ const VoterList = () => {
   const [variant, setVariant] = useState('');
   const [loading, setLoading] = useState(true);
   const [approvedElections, setApprovedElections] = useState({});
+  const [modalSelectedElection, setModalSelectedElection] = useState('');
+  const [modalElections, setModalElections] = useState([]); // snapshot of elections while modal is open
 
   useEffect(() => {
     fetchVoters();
     fetchElections();
-    const interval = setInterval(() => {
-      fetchVoters();
-      fetchElections();
-    }, 3000);
-    return () => clearInterval(interval);
+    // Removed interval to prevent flickering
+    // const interval = setInterval(() => {
+    //   fetchVoters();
+    //   fetchElections();
+    // }, 3000);
+    // return () => clearInterval(interval);
   }, []);
 
   const fetchVoters = async () => {
@@ -44,8 +47,10 @@ const VoterList = () => {
       if (response.ok) {
         const data = await response.json();
         setElections(data);
-        if (data.length > 0 && !selectedElection) {
-          setSelectedElection(data[0].election_id);
+        // Don't automatically change selection - let user's choice persist
+        // Only set initial selection if none exists and we have data
+        if (!selectedElection && data.length > 0) {
+          setSelectedElection(String(data[0].election_id));
         }
       }
     } catch (error) {
@@ -65,7 +70,7 @@ const VoterList = () => {
           const currentElection = electionsData.find(e => e.election_id === election.election_id);
           if (currentElection && currentElection.approved_voters) {
             // This is a simplified check - in real implementation, you'd have a proper endpoint
-            approvedElectionsList.push(election.election_id);
+            approvedElectionsList.push(String(election.election_id));
           }
         }
       }
@@ -97,7 +102,7 @@ const VoterList = () => {
         fetchVoters();
         setShowApproveModal(false);
         setSelectedVoter(null);
-        
+
         // Update approved elections for this voter
         setApprovedElections(prev => ({
           ...prev,
@@ -116,7 +121,10 @@ const VoterList = () => {
   const openApproveModal = async (voter) => {
     setSelectedVoter(voter);
     setShowApproveModal(true);
-    
+    // take a stable snapshot of elections for the modal to prevent flicker while background refreshes
+    setModalElections(elections.map(e => ({ ...e, election_id: String(e.election_id) })));
+    // set initial modal selected election only once when opening (use string ids)
+    setModalSelectedElection(String(elections[0]?.election_id) || '');
     // Fetch approved elections for this voter
     const approvedElectionsList = await getApprovedElectionsForVoter(voter.hashed_id);
     setApprovedElections(prev => ({
@@ -125,9 +133,13 @@ const VoterList = () => {
     }));
   };
 
+  // Note: while modal is open we use modalElections (a snapshot) to render options
   const handleApprove = () => {
-    if (selectedVoter && selectedElection) {
-      approveVoter(selectedVoter.original_id, selectedElection);
+    if (selectedVoter && modalSelectedElection) {
+      // find the original election id (could be number) from the live elections list if possible
+      const liveMatch = elections.find(e => String(e.election_id) === modalSelectedElection);
+      const electionIdToSend = liveMatch ? liveMatch.election_id : modalSelectedElection;
+      approveVoter(selectedVoter.original_id, electionIdToSend);
     }
   };
 
@@ -146,12 +158,12 @@ const VoterList = () => {
 
   const filteredVoters = voters.filter(voter => {
     const matchesSearch = voter.original_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         voter.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         voter.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         voter.place.toLowerCase().includes(searchTerm.toLowerCase());
-    
+      voter.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      voter.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      voter.place.toLowerCase().includes(searchTerm.toLowerCase());
+
     const matchesStatus = statusFilter === 'All' || voter.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -207,8 +219,8 @@ const VoterList = () => {
               </InputGroup>
             </Col>
             <Col md={4}>
-              <Form.Select 
-                value={statusFilter} 
+              <Form.Select
+                value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="form-control-custom select-custom"
               >
@@ -291,7 +303,7 @@ const VoterList = () => {
               <i className="fas fa-users fa-3x text-muted mb-3"></i>
               <h5 className="text-muted">No voters found</h5>
               <p className="text-muted">
-                {voters.length === 0 
+                {voters.length === 0
                   ? "No voters have registered yet."
                   : "Try adjusting your search criteria"
                 }
@@ -343,7 +355,10 @@ const VoterList = () => {
       </Row>
 
       {/* Approve Voter Modal */}
-      <Modal show={showApproveModal} onHide={() => setShowApproveModal(false)} size="lg">
+      <Modal show={showApproveModal} onHide={() => {
+        setShowApproveModal(false);
+        setModalElections([]);
+      }} size="lg">
         <Modal.Header closeButton className="card-header-custom">
           <Modal.Title>
             <i className="fas fa-user-check me-2"></i>
@@ -366,23 +381,23 @@ const VoterList = () => {
                   </Col>
                 </Row>
               </div>
-              
+
               <Form.Group className="mb-4">
                 <Form.Label>Select Election to Approve For:</Form.Label>
-                <Form.Select 
-                  value={selectedElection} 
-                  onChange={(e) => setSelectedElection(e.target.value)}
+                <Form.Select
+                  value={modalSelectedElection}
+                  onChange={(e) => setModalSelectedElection(e.target.value)}
                   className="form-control-custom"
                 >
-                  {elections.map((election, index) => (
-                    <option key={index} value={election.election_id}>
+                  {(modalElections.length > 0 ? modalElections : elections.map(e => ({ ...e, election_id: String(e.election_id) }))).map((election, index) => (
+                    <option key={index} value={String(election.election_id)}>
                       {election.name} ({election.status})
-                      {isAlreadyApprovedForElection(selectedVoter.original_id, election.election_id) && ' ✓'}
+                      {isAlreadyApprovedForElection(selectedVoter.original_id, String(election.election_id)) && ' ✓'}
                     </option>
                   ))}
                 </Form.Select>
                 <Form.Text className="text-muted">
-                  {isAlreadyApprovedForElection(selectedVoter.original_id, selectedElection) 
+                  {isAlreadyApprovedForElection(selectedVoter.original_id, modalSelectedElection)
                     ? 'Voter is already approved for this election'
                     : 'Select which election this voter can participate in'
                   }
@@ -394,7 +409,8 @@ const VoterList = () => {
                   <h6>Currently Approved Elections:</h6>
                   <div className="d-flex flex-wrap gap-2">
                     {approvedElections[selectedVoter.original_id].map((electionId, index) => {
-                      const election = elections.find(e => e.election_id === electionId);
+                      const lookup = (modalElections.length > 0 ? modalElections : elections.map(e => ({ ...e, election_id: String(e.election_id) })));
+                      const election = lookup.find(e => String(e.election_id) === String(electionId));
                       return (
                         <Badge key={index} bg="success" className="me-1">
                           {election ? election.name : electionId}
@@ -411,14 +427,14 @@ const VoterList = () => {
           <Button variant="secondary" onClick={() => setShowApproveModal(false)}>
             Close
           </Button>
-          <Button 
-            className="btn-custom-primary" 
+          <Button
+            className="btn-custom-primary"
             onClick={handleApprove}
-            disabled={!selectedElection || isAlreadyApprovedForElection(selectedVoter?.original_id, selectedElection)}
+            disabled={!modalSelectedElection || isAlreadyApprovedForElection(selectedVoter?.original_id, modalSelectedElection)}
           >
             <i className="fas fa-check me-2"></i>
-            {isAlreadyApprovedForElection(selectedVoter?.original_id, selectedElection) 
-              ? 'Already Approved' 
+            {isAlreadyApprovedForElection(selectedVoter?.original_id, modalSelectedElection)
+              ? 'Already Approved'
               : 'Approve for Election'
             }
           </Button>

@@ -18,8 +18,9 @@ const AdminResultsDashboard = () => {
 
   useEffect(() => {
     fetchElections();
-    const interval = setInterval(fetchElections, 3000);
-    return () => clearInterval(interval);
+    // Removed interval to prevent flickering
+    // const interval = setInterval(fetchElections, 3000);
+    // return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ const AdminResultsDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         setElections(data);
+        // Only set initial selection if none exists and we have data
         if (!selectedElection && data.length > 0) {
           setSelectedElection(data[0].election_id);
         }
@@ -58,13 +60,13 @@ const AdminResultsDashboard = () => {
 
   const selectedElectionData = elections.find(e => e.election_id === selectedElection);
   const totalVotes = Object.values(results).reduce((sum, votes) => sum + votes, 0);
-  const votedPercentage = selectedElectionData && selectedElectionData.voter_count > 0 
-    ? ((totalVotes / selectedElectionData.voter_count) * 100).toFixed(1) 
+  const votedPercentage = selectedElectionData && selectedElectionData.voter_count > 0
+    ? ((totalVotes / selectedElectionData.voter_count) * 100).toFixed(1)
     : 0;
 
-  const leadingCandidate = Object.keys(results).length > 0 
-    ? Object.entries(results).reduce((leading, [candidate, votes]) => 
-        votes > (results[leading] || 0) ? candidate : leading, Object.keys(results)[0])
+  const leadingCandidate = Object.keys(results).length > 0
+    ? Object.entries(results).reduce((leading, [candidate, votes]) =>
+      votes > (results[leading] || 0) ? candidate : leading, Object.keys(results)[0])
     : 'No votes yet';
 
   const chartData = {
@@ -73,7 +75,7 @@ const AdminResultsDashboard = () => {
       {
         data: Object.values(results),
         backgroundColor: [
-          '#3498DB', '#E74C3C', '#27AE60', '#F39C12', 
+          '#3498DB', '#E74C3C', '#27AE60', '#F39C12',
           '#9B59B6', '#34495E', '#16A085', '#D35400'
         ],
         borderColor: '#fff',
@@ -113,8 +115,8 @@ const AdminResultsDashboard = () => {
         <Col md={6}>
           <Form.Group>
             <Form.Label>Select Election</Form.Label>
-            <Form.Select 
-              value={selectedElection} 
+            <Form.Select
+              value={selectedElection}
               onChange={(e) => setSelectedElection(e.target.value)}
               className="form-control-custom"
             >
