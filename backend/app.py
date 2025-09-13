@@ -569,6 +569,10 @@ def login_voter():
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
+    # Automatically initialize the database tables before starting the server
+    from init_db import initialize_db
+    initialize_db()
+    print("Database initialized.")
     print("Starting Flask server on port 5000...")
     print("Available endpoints:")
     print("  GET  /health - Health check")
