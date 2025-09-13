@@ -37,7 +37,7 @@ This project now uses MySQL for persistent storage of all elections, voters, vot
    ```
    mysql -u root -p
    ```
-2. Create a database and user for the project:
+2. Create a database and user for the project using the main user credentials:
    ```sql
    CREATE DATABASE voting_system;
    CREATE USER 'project'@'localhost' IDENTIFIED BY 'mohit';
@@ -94,11 +94,13 @@ You will see new command windows open for each server. The app will be available
 - Immutable audit trail
 
 ## Project Team
+
 - Neel Pandey : 24BCE10303
 - Yash Tripathi : 24BCE10603
 - Ayush Man Singh Bhadauria : 24BCE10404
 - Mohit Bankar : 24BCE11104
 - Arsh Bakshi : 24BCE10568
+
 
 ## Supervisor
 Dr. Nilesh Kunhare
