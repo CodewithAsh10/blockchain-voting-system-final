@@ -28,21 +28,12 @@ cd /d %~dp0
 REM === Go to frontend-new directory ===
 cd frontend-new
 
-REM === Try npm start first ===
-echo [INFO] Trying npm start first...
-npm start
-if errorlevel 1 (
-    echo [INFO] npm start failed, running npm install...
+REM === Check if node_modules exists, if not run npm install ===
+if not exist node_modules (
+    echo [INFO] node_modules not found, running npm install...
     npm install --no-audit --no-fund
     if errorlevel 1 (
         echo [ERROR] npm install failed. See above for details.
-        pause
-        exit /b 1
-    )
-    echo [INFO] Retrying npm start...
-    npm start
-    if errorlevel 1 (
-        echo [ERROR] npm start failed again. See above for details.
         pause
         exit /b 1
     )
