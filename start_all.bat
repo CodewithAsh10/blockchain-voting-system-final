@@ -32,12 +32,26 @@ cd ..
 REM === Go to frontend-new directory ===
 cd frontend-new
 
+REM === Check if npm is installed ===
+npm --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] npm is not installed. Please install Node.js and npm first.
+    pause
+    exit /b 1
+)
+
 REM === Check if node_modules exists, if not then install ===
 if not exist node_modules (
     echo [INFO] Installing npm packages...
     npm install
 ) else (
-    echo [INFO] npm packages already installed.
+    REM === Check if react is installed in node_modules ===
+    if not exist node_modules\react (
+        echo [INFO] React not found. Running npm install to fix dependencies...
+        npm install
+    ) else (
+        echo [INFO] npm packages already installed.
+    )
 )
 
 REM === Start frontend in a new window ===
