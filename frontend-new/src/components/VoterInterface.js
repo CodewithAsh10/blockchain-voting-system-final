@@ -9,6 +9,7 @@ const VoterInterface = ({ user, onLogout }) => {
   const [variant, setVariant] = useState('');
   const [loading, setLoading] = useState(false);
   const [voterInfo, setVoterInfo] = useState(null);
+  const [popup, setPopup] = useState({ show: false, election: '', candidate: '' });
 
   useEffect(() => {
     fetchElections();
@@ -45,7 +46,7 @@ const VoterInterface = ({ user, onLogout }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     if (!selectedCandidate || !selectedElection) {
       setMessage('Please select both election and candidate');
       setVariant('danger');
@@ -68,12 +69,15 @@ const VoterInterface = ({ user, onLogout }) => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         setMessage('Vote cast successfully! Your vote has been recorded on the blockchain.');
         setVariant('success');
         setSelectedCandidate('');
         setSelectedElection('');
+        // Show popup with election and candidate
+        const electionName = elections.find(e => e.election_id === selectedElection)?.name || '';
+        setPopup({ show: true, election: electionName, candidate: selectedCandidate });
       } else {
         setMessage(data.message);
         setVariant('danger');
@@ -104,9 +108,9 @@ const VoterInterface = ({ user, onLogout }) => {
             <i className="fas fa-vote-yea me-2"></i>
             Voter Portal
           </Navbar.Brand>
-          <Button 
-            variant="outline-light" 
-            size="sm" 
+          <Button
+            variant="outline-light"
+            size="sm"
             onClick={onLogout}
           >
             <i className="fas fa-sign-out-alt me-1"></i>
@@ -136,7 +140,7 @@ const VoterInterface = ({ user, onLogout }) => {
                   </Col>
                   <Col md={6}>
                     <p><strong>Email:</strong> {voterInfo?.email || 'Not provided'}</p>
-                    <p><strong>Status:</strong> 
+                    <p><strong>Status:</strong>
                       {voterInfo ? getStatusBadge(voterInfo.status) : <Badge bg="secondary">Unknown</Badge>}
                     </p>
                   </Col>
@@ -163,8 +167,8 @@ const VoterInterface = ({ user, onLogout }) => {
                       <i className="fas fa-vote-yea me-2"></i>
                       Select Election
                     </Form.Label>
-                    <Form.Select 
-                      value={selectedElection} 
+                    <Form.Select
+                      value={selectedElection}
                       onChange={(e) => setSelectedElection(e.target.value)}
                       className="form-control-custom select-custom"
                       disabled={loading}
@@ -177,7 +181,7 @@ const VoterInterface = ({ user, onLogout }) => {
                       ))}
                     </Form.Select>
                     <Form.Text className="text-muted">
-                      {activeElections.length === 0 
+                      {activeElections.length === 0
                         ? 'No active elections available'
                         : 'Select the election you want to vote in'
                       }
@@ -190,8 +194,8 @@ const VoterInterface = ({ user, onLogout }) => {
                         <i className="fas fa-user-tie me-2"></i>
                         Select Candidate
                       </Form.Label>
-                      <Form.Select 
-                        value={selectedCandidate} 
+                      <Form.Select
+                        value={selectedCandidate}
                         onChange={(e) => setSelectedCandidate(e.target.value)}
                         className="form-control-custom select-custom"
                         disabled={loading}
@@ -209,8 +213,8 @@ const VoterInterface = ({ user, onLogout }) => {
                   )}
 
                   <div className="d-grid">
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       className="btn-custom-primary"
                       disabled={loading || !selectedCandidate || !selectedElection}
                       size="lg"
@@ -255,6 +259,20 @@ const VoterInterface = ({ user, onLogout }) => {
                 )}
               </Card.Body>
             </Card>
+
+            {/* Popup for vote confirmation */}
+            {popup.show && (
+              <div style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                background: 'rgba(0,0,0,0.3)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <div style={{ background: 'white', padding: 32, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+                  <h4 style={{ marginBottom: 16 }}>You voted!</h4>
+                  <p style={{ marginBottom: 8 }}>You voted in <b>{popup.election}</b> for <b>{popup.candidate}</b>.</p>
+                  <button className="btn btn-primary" onClick={() => setPopup({ show: false, election: '', candidate: '' })}>OK</button>
+                </div>
+              </div>
+            )}
           </Col>
         </Row>
       </Container>
