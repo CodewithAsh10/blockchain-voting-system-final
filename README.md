@@ -28,7 +28,7 @@ A secure, transparent voting platform built on blockchain technology.
 - npm or yarn
 - MySQL Server (local or cloud)
 
-### MySQL Database Setup (New)
+### MySQL Database Setup (For First Time Only)
 
 This project now uses MySQL for persistent storage of all elections, voters, votes, and blockchain data.
 
