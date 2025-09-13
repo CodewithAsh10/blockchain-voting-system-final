@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import datetime
 from db import get_db_connection
+from otp_utils import generate_and_store_otp, verify_otp
 
 app = Flask(__name__)
 CORS(app)
@@ -484,14 +485,15 @@ def get_voters():
 def register_voter_self():
     try:
         data = request.get_json()
-        required_fields = ['id', 'name', 'email', 'place', 'age']
+        required_fields = ['id', 'name', 'email', 'place', 'age', 'otp']
         missing_fields = [field for field in required_fields if field not in data or not data[field]]
-        
         if missing_fields:
             return jsonify({"message": f"Missing required fields: {', '.join(missing_fields)}"}), 400
-        
+        # Verify OTP before registration
+        from otp_utils import verify_otp
+        if not verify_otp(data['email'], data['otp']):
+            return jsonify({"message": "Invalid or expired OTP"}), 400
         voter_id_hash = hashlib.sha256(data['id'].encode()).hexdigest()
-        
         # Check if voter exists in DB
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -509,13 +511,62 @@ def register_voter_self():
             "message": "Registration submitted successfully. Waiting for admin approval.",
             "hashed_id": voter_id_hash
         }), 201
-        
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "timestamp": time.time()}), 200
+
+@app.route('/send_otp', methods=['POST'])
+def send_otp():
+    data = request.get_json()
+    email = data.get('email')
+    if not email:
+        return jsonify({'message': 'Email is required'}), 400
+    try:
+        generate_and_store_otp(email)
+        return jsonify({'message': 'OTP sent to email'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Failed to send OTP: {str(e)}'}), 500
+
+@app.route('/verify_otp', methods=['POST'])
+def verify_otp_route():
+    data = request.get_json()
+    email = data.get('email')
+    otp = data.get('otp')
+    if not email or not otp:
+        return jsonify({'message': 'Email and OTP are required'}), 400
+    if verify_otp(email, otp):
+        return jsonify({'message': 'OTP verified'}), 200
+    else:
+        return jsonify({'message': 'Invalid or expired OTP'}), 400
+
+@app.route('/login_voter', methods=['POST'])
+def login_voter():
+    try:
+        data = request.get_json()
+        required_fields = ['id', 'otp']
+        missing_fields = [field for field in required_fields if field not in data or not data[field]]
+        if missing_fields:
+            return jsonify({"message": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+        # Fetch voter by ID
+        voter_id_hash = hashlib.sha256(data['id'].encode()).hexdigest()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT * FROM voters WHERE hashed_id=%s', (voter_id_hash,))
+        voter = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not voter:
+            return jsonify({"message": "Voter not found. Please register first."}), 404
+        # Verify OTP
+        from otp_utils import verify_otp
+        if not verify_otp(voter['email'], data['otp']):
+            return jsonify({"message": "Invalid or expired OTP"}), 400
+        return jsonify({"message": "Login successful", "voter_id": voter_id_hash}), 200
+    except Exception as e:
+        return jsonify({"message": f"Server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     print("Starting Flask server on port 5000...")
@@ -530,5 +581,8 @@ if __name__ == '__main__':
     print("  GET  /chain/<election_id> - Get blockchain data")
     print("  GET  /voters - Get all registered voters")
     print("  POST /register_voter - Register new voter")
+    print("  POST /send_otp - Send OTP to email")
+    print("  POST /verify_otp - Verify OTP")
+    print("  POST /login_voter - Login voter with OTP")
     
     app.run(host='0.0.0.0', port=5000, debug=True)

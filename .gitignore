@@ -1,16 +1,14 @@
   # Python
   venv/
   __pycache__/
-  *.pyc
+  .pyc
   venv/
   
-
   # Node.js
   node_modules/
   dist/
   build/
   .env
-
 
   # OS-specific
   .DS_Store

@@ -15,33 +15,159 @@ const Login = ({ onLogin }) => {
   const [message, setMessage] = useState('');
   const [variant, setVariant] = useState('');
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
 
   // Mock admin user
   const adminUsers = [
     { username: 'admin', password: 'admin123', name: 'System Administrator' }
   ];
 
-  const handleVoterLogin = async (e) => {
+  // Registration OTP logic
+  const handleSendOtp = async () => {
+    setOtpLoading(true);
+    setMessage('');
+    try {
+      const response = await fetch('http://localhost:5000/send_otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: registrationData.email })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setOtpSent(true);
+        setMessage('OTP sent to your email. Please check your inbox.');
+        setVariant('success');
+      } else {
+        setMessage(data.message);
+        setVariant('danger');
+      }
+    } catch (error) {
+      setMessage('Error sending OTP.');
+      setVariant('danger');
+    }
+    setOtpLoading(false);
+  };
+
+  const handleRegistration = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    if (!voterId.trim()) {
-      setMessage('Please enter your voter ID');
+    if (!registrationData.id || !registrationData.name || !registrationData.email || !registrationData.place || !registrationData.age || !otp) {
+      setMessage('Please fill all required fields and enter OTP');
       setVariant('danger');
       setLoading(false);
       return;
     }
-
+    // Only submit registration, let backend verify OTP
     try {
-      // Check if voter is registered
+      const response = await fetch('http://localhost:5000/register_voter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: registrationData.id,
+          name: registrationData.name,
+          email: registrationData.email,
+          place: registrationData.place,
+          age: registrationData.age,
+          otp: otp
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMessage('Registration submitted successfully! Please wait for admin approval.');
+        setVariant('success');
+        setRegistrationData({ id: '', name: '', email: '', place: '', age: '' });
+        setOtp('');
+        setOtpSent(false);
+        setActiveTab('login'); // Switch to login tab after successful registration
+      } else {
+        setMessage(data.message);
+        setVariant('danger');
+      }
+    } catch (error) {
+      setMessage('Error connecting to server. Please try again.');
+      setVariant('danger');
+    }
+    setLoading(false);
+  };
+
+  // Login OTP logic
+  const [loginOtpSent, setLoginOtpSent] = useState(false);
+  const [loginOtp, setLoginOtp] = useState('');
+  const [loginOtpLoading, setLoginOtpLoading] = useState(false);
+
+  const handleSendLoginOtp = async () => {
+    setLoginOtpLoading(true);
+    setMessage('');
+    try {
+      // Fetch email for voterId
       const response = await fetch('http://localhost:5000/voters');
       if (response.ok) {
         const voters = await response.json();
         const registeredVoter = voters.find(v => v.original_id === voterId.trim());
-        
         if (registeredVoter) {
+          const otpRes = await fetch('http://localhost:5000/send_otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: registeredVoter.email })
+          });
+          const otpData = await otpRes.json();
+          if (otpRes.ok) {
+            setLoginOtpSent(true);
+            setMessage('OTP sent to your email. Please check your inbox.');
+            setVariant('success');
+          } else {
+            setMessage(otpData.message);
+            setVariant('danger');
+          }
+        } else {
+          setMessage('Voter ID not found. Please register first.');
+          setVariant('danger');
+        }
+      } else {
+        setMessage('Error connecting to server. Please try again.');
+        setVariant('danger');
+      }
+    } catch (error) {
+      setMessage('Error sending OTP.');
+      setVariant('danger');
+    }
+    setLoginOtpLoading(false);
+  };
+
+  const handleVoterLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    if (!voterId.trim() || !loginOtp) {
+      setMessage('Please enter your voter ID and OTP');
+      setVariant('danger');
+      setLoading(false);
+      return;
+    }
+    try {
+      // Fetch email for voterId
+      const response = await fetch('http://localhost:5000/voters');
+      if (response.ok) {
+        const voters = await response.json();
+        const registeredVoter = voters.find(v => v.original_id === voterId.trim());
+        if (registeredVoter) {
+          // Verify OTP
+          const verifyRes = await fetch('http://localhost:5000/verify_otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: registeredVoter.email, otp: loginOtp })
+          });
+          const verifyData = await verifyRes.json();
+          if (!verifyRes.ok) {
+            setMessage(verifyData.message);
+            setVariant('danger');
+            setLoading(false);
+            return;
+          }
           if (registeredVoter.status === 'Active') {
-            // Create voter object with actual data from backend
             const voter = {
               id: registeredVoter.original_id,
               name: registeredVoter.name,
@@ -73,7 +199,7 @@ const Login = ({ onLogin }) => {
   const handleAdminLogin = (e) => {
     e.preventDefault();
     const admin = adminUsers.find(a => a.username === adminCredentials.username && a.password === adminCredentials.password);
-    
+
     if (admin) {
       onLogin(admin, 'admin');
       setMessage('');
@@ -81,51 +207,6 @@ const Login = ({ onLogin }) => {
       setMessage('Invalid admin credentials');
       setVariant('danger');
     }
-  };
-
-  const handleRegistration = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    // Validate all fields
-    if (!registrationData.id || !registrationData.name || !registrationData.email || !registrationData.place || !registrationData.age) {
-      setMessage('Please fill all required fields');
-      setVariant('danger');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:5000/register_voter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: registrationData.id,
-          name: registrationData.name,
-          email: registrationData.email,
-          place: registrationData.place,
-          age: registrationData.age
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        setMessage('Registration submitted successfully! Please wait for admin approval.');
-        setVariant('success');
-        setRegistrationData({ id: '', name: '', email: '', place: '', age: '' });
-        setActiveTab('login'); // Switch to login tab after successful registration
-      } else {
-        setMessage(data.message);
-        setVariant('danger');
-      }
-    } catch (error) {
-      setMessage('Error connecting to server. Please try again.');
-      setVariant('danger');
-    }
-    setLoading(false);
   };
 
   const handleRegistrationChange = (field, value) => {
@@ -178,18 +259,56 @@ const Login = ({ onLogin }) => {
                         onChange={(e) => setVoterId(e.target.value)}
                         className="form-control-custom"
                         required
-                        disabled={loading}
+                        disabled={loading || loginOtpSent}
                       />
                       <Form.Text className="text-muted">
                         Enter the voter ID you registered with
                       </Form.Text>
                     </Form.Group>
-
+                    {!loginOtpSent && (
+                      <div className="d-grid mb-3">
+                        <Button
+                          variant="secondary"
+                          onClick={handleSendLoginOtp}
+                          disabled={loginOtpLoading || !voterId.trim()}
+                        >
+                          {loginOtpLoading ? 'Sending OTP...' : 'Send OTP'}
+                        </Button>
+                      </div>
+                    )}
+                    {loginOtpSent && (
+                      <>
+                        <Form.Group className="mb-4">
+                          <Form.Label className="form-label-custom">
+                            <i className="fas fa-key me-2"></i>
+                            Enter OTP
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Enter the OTP sent to your email"
+                            value={loginOtp}
+                            onChange={(e) => setLoginOtp(e.target.value)}
+                            className="form-control-custom"
+                            required
+                            disabled={loading}
+                          />
+                        </Form.Group>
+                        <div className="d-grid mb-3">
+                          <Button
+                            variant="link"
+                            onClick={handleSendLoginOtp}
+                            disabled={loginOtpLoading}
+                          >
+                            {loginOtpLoading ? 'Resending...' : 'Resend OTP'}
+                          </Button>
+                        </div>
+                      </>
+                    )}
                     <div className="d-grid">
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         className="btn-custom-primary"
-                        disabled={loading}
+                        disabled={loading || !loginOtpSent}
                         size="lg"
                       >
                         {loading ? (
@@ -210,9 +329,9 @@ const Login = ({ onLogin }) => {
                   <div className="text-center mt-3">
                     <p className="text-muted">
                       Don't have an account?{' '}
-                      <Button 
-                        variant="link" 
-                        className="p-0" 
+                      <Button
+                        variant="link"
+                        className="p-0"
                         onClick={() => setActiveTab('register')}
                       >
                         Register here
@@ -273,6 +392,7 @@ const Login = ({ onLogin }) => {
                         onChange={(e) => handleRegistrationChange('email', e.target.value)}
                         className="form-control-custom"
                         required
+                        disabled={otpSent}
                       />
                     </Form.Group>
 
@@ -313,9 +433,28 @@ const Login = ({ onLogin }) => {
                       </Col>
                     </Row>
 
+                    <Form.Group className="mb-4">
+                      <Form.Label className="form-label-custom">
+                        <i className="fas fa-key me-2"></i>
+                        OTP
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Enter the OTP sent to your email"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                        className="form-control-custom"
+                        required
+                        disabled={loading}
+                      />
+                      <Form.Text className="text-muted">
+                        One-Time Password sent to your registered email
+                      </Form.Text>
+                    </Form.Group>
+
                     <div className="d-grid">
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         className="btn-custom-primary"
                         disabled={loading}
                         size="lg"
@@ -333,14 +472,25 @@ const Login = ({ onLogin }) => {
                         )}
                       </Button>
                     </div>
+
+                    <div className="text-center mt-3">
+                      <Button
+                        variant="link"
+                        className="p-0"
+                        onClick={handleSendOtp}
+                        disabled={otpSent || loading}
+                      >
+                        {otpSent ? 'OTP sent, click to resend' : 'Send OTP to email'}
+                      </Button>
+                    </div>
                   </Form>
 
                   <div className="text-center mt-3">
                     <p className="text-muted">
                       Already have an account?{' '}
-                      <Button 
-                        variant="link" 
-                        className="p-0" 
+                      <Button
+                        variant="link"
+                        className="p-0"
                         onClick={() => setActiveTab('login')}
                       >
                         Login here
@@ -365,7 +515,7 @@ const Login = ({ onLogin }) => {
                         type="text"
                         placeholder="Enter admin username"
                         value={adminCredentials.username}
-                        onChange={(e) => setAdminCredentials({...adminCredentials, username: e.target.value})}
+                        onChange={(e) => setAdminCredentials({ ...adminCredentials, username: e.target.value })}
                         className="form-control-custom"
                         required
                       />
@@ -380,7 +530,7 @@ const Login = ({ onLogin }) => {
                         type="password"
                         placeholder="Enter admin password"
                         value={adminCredentials.password}
-                        onChange={(e) => setAdminCredentials({...adminCredentials, password: e.target.value})}
+                        onChange={(e) => setAdminCredentials({ ...adminCredentials, password: e.target.value })}
                         className="form-control-custom"
                         required
                       />
