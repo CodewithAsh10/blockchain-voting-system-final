@@ -4,7 +4,6 @@
   *.pyc
   venv/
   
- 
 
   # Node.js
   node_modules/
@@ -12,18 +11,9 @@
   build/
   .env
 
- ##   mmhstle-new_features ##
 
   # OS-specific
   .DS_Store
   Thumbs.db
-
-  backend/blockchain/__pycache__/block.cpython-312.pyc
-  backend/blockchain/__pycache__/blockchain.cpython-312.pyc
-  backend/blockchain/__pycache__/vote.cpython-312.pyc
-  *.pyc
-  
-  # OS-specific
-  .DS_Store
-  Thumbs.db
+ 
   
