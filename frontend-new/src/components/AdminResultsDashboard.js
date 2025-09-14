@@ -12,6 +12,7 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 const AdminResultsDashboard = () => {
   const [results, setResults] = useState({});
+  const [voterTurnoutCount, setVoterTurnoutCount] = useState(0);
   const [elections, setElections] = useState([]);
   const [selectedElection, setSelectedElection] = useState('');
   const [loading, setLoading] = useState(true);
@@ -51,7 +52,8 @@ const AdminResultsDashboard = () => {
       const response = await fetch(`http://localhost:5000/results/${electionId}`);
       if (response.ok) {
         const data = await response.json();
-        setResults(data);
+        setResults(data.results || {});
+        setVoterTurnoutCount(data.voter_turnout_count || 0);
       }
     } catch (error) {
       console.error('Error fetching results:', error);
@@ -61,7 +63,7 @@ const AdminResultsDashboard = () => {
   const selectedElectionData = elections.find(e => e.election_id === selectedElection);
   const totalVotes = Object.values(results).reduce((sum, votes) => sum + votes, 0);
   const votedPercentage = selectedElectionData && selectedElectionData.voter_count > 0
-    ? ((totalVotes / selectedElectionData.voter_count) * 100).toFixed(1)
+    ? ((voterTurnoutCount / selectedElectionData.voter_count) * 100).toFixed(1)
     : 0;
 
   const leadingCandidate = Object.keys(results).length > 0
@@ -200,7 +202,7 @@ const AdminResultsDashboard = () => {
                 <Card.Body>
                   <p><strong>Election ID:</strong> <code>{selectedElectionData.election_id}</code></p>
                   <p><strong>Status:</strong> <span className="text-capitalize">{selectedElectionData.status}</span></p>
-                  <p><strong>Candidates:</strong> {selectedElectionData.candidates.join(', ')}</p>
+                  <p><strong>Candidates:</strong> {Array.isArray(selectedElectionData.candidates) ? selectedElectionData.candidates.join(', ') : ''}</p>
                   <p><strong>Total Votes:</strong> {totalVotes}</p>
                   <p><strong>Voter Turnout:</strong> {votedPercentage}%</p>
                   {leadingCandidate !== 'No votes yet' && (

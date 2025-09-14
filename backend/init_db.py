@@ -62,6 +62,17 @@ def initialize_db():
             FOREIGN KEY (vote_id) REFERENCES votes(id)
         )
     ''')
+    # Create election_voters table to link voters to elections
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS election_voters (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            election_id VARCHAR(255) NOT NULL,
+            voter_id VARCHAR(255) NOT NULL,
+            status VARCHAR(50) NOT NULL,
+            FOREIGN KEY (election_id) REFERENCES elections(election_id),
+            FOREIGN KEY (voter_id) REFERENCES voters(hashed_id)
+        )
+    ''')
     conn.commit()
     cursor.close()
     conn.close()

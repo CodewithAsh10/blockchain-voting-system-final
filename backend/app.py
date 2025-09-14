@@ -208,8 +208,13 @@ def save_block_to_db(election_id, block):
 def get_elections():
     try:
         elections_list = []
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
         for row in get_elections_from_db():
             candidates = json.loads(row['candidates']) if row['candidates'] else []
+            # Count approved voters for this election
+            cursor.execute("SELECT COUNT(*) as count FROM election_voters WHERE election_id=%s AND status='approved'", (row['election_id'],))
+            voter_count = cursor.fetchone()['count']
             elections_list.append({
                 'election_id': row['election_id'],
                 'name': row['name'],
@@ -217,8 +222,9 @@ def get_elections():
                 'start_time': row['start_time'],
                 'end_time': row['end_time'],
                 'status': row['status'],
-                'voter_count': 0  # Will update with real count later
+                'voter_count': voter_count
             })
+        conn.close()
         return jsonify(elections_list), 200
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
@@ -322,7 +328,14 @@ def approve_voter():
         if voter['status'] == 'Pending':
             cursor.execute('UPDATE voters SET status=%s WHERE hashed_id=%s', ('Active', voter_hash))
             conn.commit()
-        # Optionally, store approval in a new table if needed
+        # Insert or update approval in election_voters table
+        cursor.execute('SELECT * FROM election_voters WHERE election_id=%s AND voter_id=%s', (election_id, voter_hash))
+        ev = cursor.fetchone()
+        if ev:
+            cursor.execute('UPDATE election_voters SET status=%s WHERE election_id=%s AND voter_id=%s', ('approved', election_id, voter_hash))
+        else:
+            cursor.execute('INSERT INTO election_voters (election_id, voter_id, status) VALUES (%s, %s, %s)', (election_id, voter_hash, 'approved'))
+        conn.commit()
         cursor.close()
         conn.close()
         return jsonify({
@@ -427,9 +440,12 @@ def get_results(election_id):
         cursor = conn.cursor(dictionary=True)
         cursor.execute('SELECT candidate, COUNT(*) as votes FROM votes WHERE election_id=%s GROUP BY candidate', (election_id,))
         results = {row['candidate']: row['votes'] for row in cursor.fetchall()}
+        # Count unique voters who voted in this election
+        cursor.execute('SELECT COUNT(DISTINCT voter_id) as turnout FROM votes WHERE election_id=%s', (election_id,))
+        turnout = cursor.fetchone()['turnout']
         cursor.close()
         conn.close()
-        return jsonify(results), 200
+        return jsonify({"results": results, "voter_turnout_count": turnout}), 200
     except Exception as e:
         return jsonify({"message": f"Server error: {str(e)}"}), 500
 
