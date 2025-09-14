@@ -97,9 +97,9 @@ You will see new command windows open for each server. The app will be available
 
 - Neel Pandey : 24BCE10303
 - Yash Tripathi : 24BCE10603
-- Ayush Man Singh Bhadauria : 24BCE10404
 - Mohit Bankar : 24BCE11104
 - Arsh Bakshi : 24BCE10568
+- Ayush Man Singh Bhadauria : 24BCE10404
 
 
 ## Supervisor
