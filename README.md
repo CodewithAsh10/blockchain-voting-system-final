@@ -17,6 +17,7 @@ A secure, transparent voting platform built on blockchain technology.
 ## Technology Stack
 - **Frontend**: React, Bootstrap, Chart.js
 - **Backend**: Python, Flask, WebSockets
+- **Database**: MYSQL
 - **Blockchain**: Custom Python implementation
 - **Tools**: GitHub, Postman, VS Code, Figma
 
